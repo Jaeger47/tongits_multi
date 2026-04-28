@@ -1,0 +1,6 @@
+<!-- Author: Mark Daniel G. Dacer -->
+<svg xmlns="http://www.w3.org/2000/svg" width="220" height="220" viewBox="0 0 220 220" role="img" aria-label="green felt texture">
+  <rect width="220" height="220" fill="#08745f"/>
+  <path d="M0 22h220M0 66h220M0 110h220M0 154h220M0 198h220M22 0v220M66 0v220M110 0v220M154 0v220M198 0v220" stroke="#0c8b72" stroke-width="3" opacity=".35"/>
+  <path d="M0 0l220 220M220 0L0 220" stroke="#064f42" stroke-width="2" opacity=".18"/>
+</svg>

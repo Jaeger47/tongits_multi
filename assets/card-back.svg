@@ -1,0 +1,10 @@
+<!-- Author: Mark Daniel G. Dacer -->
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="224" viewBox="0 0 160 224" role="img" aria-label="Tongits card back">
+  <rect width="160" height="224" rx="8" fill="#f8fafc"/>
+  <rect x="8" y="8" width="144" height="208" rx="8" fill="#a71930"/>
+  <rect x="18" y="18" width="124" height="188" rx="6" fill="#0f8f74"/>
+  <path d="M28 38h104M28 186h104M40 26v172M120 26v172" stroke="#f8fafc" stroke-width="4" opacity=".85"/>
+  <path d="M80 52c18 16 34 30 34 52 0 29-22 48-34 66-12-18-34-37-34-66 0-22 16-36 34-52z" fill="#facc15"/>
+  <path d="M80 70c-11 11-20 20-20 35 0 17 11 29 20 42 9-13 20-25 20-42 0-15-9-24-20-35z" fill="#a71930"/>
+  <text x="80" y="113" text-anchor="middle" font-family="Georgia, serif" font-size="28" font-weight="700" fill="#f8fafc">T</text>
+</svg>

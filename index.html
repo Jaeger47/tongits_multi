@@ -1,0 +1,170 @@
+<!doctype html>
+<!-- Author: Mark Daniel G. Dacer -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tongits Table</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Three-player Tongits</p>
+        <h1>Tongits Table</h1>
+      </div>
+      <div class="topbar-controls">
+        <label>
+          Name
+          <input id="player-name-input" type="text" maxlength="24" placeholder="Player name">
+        </label>
+        <label>
+          Server
+          <input id="server-url-input" type="text" placeholder="https://your-render-service.onrender.com">
+        </label>
+        <label>
+          Room
+          <input id="room-code-input" type="text" maxlength="6" placeholder="ABC123">
+        </label>
+        <label>
+          Cards
+          <select id="card-theme-select">
+            <option value="classic" selected>Classic</option>
+            <option value="dark">Dark</option>
+          </select>
+        </label>
+        <button id="create-room-btn" type="button">Create Room</button>
+        <button id="join-room-btn" type="button">Join Room</button>
+        <button id="leave-room-btn" type="button">Leave Room</button>
+        <button id="rules-btn" type="button">Rules</button>
+      </div>
+    </header>
+
+    <main class="main-layout">
+      <section class="table-wrap" aria-label="Tongits game table">
+        <div class="opponent-row">
+          <article id="player-1" class="player-panel opponent-panel"></article>
+          <article id="player-2" class="player-panel opponent-panel"></article>
+        </div>
+
+        <section id="card-table" class="card-table">
+          <div class="score-strip" id="score-strip"></div>
+
+          <div class="center-piles">
+            <button id="stock-pile" class="pile stock-pile" type="button" aria-label="Draw from stock"></button>
+            <div class="pile-label">
+              <strong>Stock</strong>
+              <span id="stock-count">0 cards</span>
+            </div>
+            <button id="discard-pile" class="pile discard-pile" type="button" aria-label="Take top discard"></button>
+            <div class="pile-label">
+              <strong>Discard</strong>
+              <span id="discard-label">Empty</span>
+            </div>
+          </div>
+
+          <div class="turn-banner" id="turn-banner">Deal starting...</div>
+          <div class="meld-board" id="meld-board"></div>
+        </section>
+
+        <section id="player-0" class="player-panel human-panel"></section>
+
+        <section class="action-bar" aria-label="Player actions">
+          <button id="draw-stock-btn" type="button">Draw Stock</button>
+          <button id="take-discard-btn" type="button">Take Discard</button>
+          <button id="lay-meld-btn" type="button">Lay Meld</button>
+          <button id="discard-btn" type="button">Discard</button>
+          <button id="tongits-btn" type="button">Tongits</button>
+          <button id="draw-call-btn" type="button">Call Draw</button>
+          <button id="sort-hand-btn" type="button">Sort Hand</button>
+          <button id="auto-group-btn" type="button">Auto Group: Off</button>
+        </section>
+
+        <section id="draw-response" class="draw-response" hidden>
+          <strong id="draw-response-title">Draw called</strong>
+          <span id="draw-response-copy">Choose whether to fold or challenge.</span>
+          <button id="challenge-btn" type="button">Challenge</button>
+          <button id="fold-btn" type="button">Fold</button>
+        </section>
+      </section>
+
+      <aside class="side-rail">
+        <section class="status-card">
+          <h2>Multiplayer</h2>
+          <p id="connection-status">Disconnected from server.</p>
+          <p id="room-status">Not in a room yet.</p>
+        </section>
+        <section class="status-card">
+          <h2>Action Feed</h2>
+          <div id="game-log" class="game-log" aria-live="polite"></div>
+        </section>
+        <section class="status-card">
+          <h2>Selected Cards</h2>
+          <p id="selected-readout">None</p>
+          <p id="feedback" class="feedback" aria-live="assertive"></p>
+        </section>
+      </aside>
+    </main>
+  </div>
+
+  <div id="rules-panel" class="overlay" hidden>
+    <article class="modal rules-modal">
+      <button id="close-rules-btn" class="modal-close" type="button">Close</button>
+      <h2>Rules Used In This App</h2>
+      <p>This table follows a Pagat-style strict-open Tongits ruleset, with the burn/sunog handling stated explicitly.</p>
+      <h3>Round Flow</h3>
+      <p>Three players use a 52-card deck. The dealer receives 13 cards, the other two receive 12, and the dealer starts by optionally exposing melds and discarding. Play then moves counterclockwise. Each normal turn starts with a stock draw or a legal discard pickup, may include melds and sapaw, and ends with a discard unless Tongits is called.</p>
+      <h3>Melds And Sapaw</h3>
+      <p>Sets are 3 or 4 cards of the same rank. Runs are 3 or more consecutive cards of the same suit. Aces are low only, so A-2-3 is legal and Q-K-A is not. Sapaw can add a legal card to any exposed meld. Sapaw on another player's meld blocks that owner from calling Draw on their next turn; sapaw on your own meld blocks your own next-turn Draw.</p>
+      <p>The Auto Group button privately organizes your hand into the best hidden meld groups and deadwood. These groups help you see scoring and select melds quickly, but they are not exposed and do not protect you from sunog until you lay them on the table.</p>
+      <h3>Discard Pickup</h3>
+      <p>The top discard may be taken only when it immediately forms a new exposed meld with at least two cards from the taker's hand. It cannot be taken just to sapaw an existing meld.</p>
+      <h3>Tongits</h3>
+      <p>A player wins by Tongits when their hand is empty through melds, sapaw, or final discard, or when every remaining hand card can be grouped into legal melds.</p>
+      <h3>Draw Calls</h3>
+      <p>Draw can be called only at the start of your turn, before drawing, after you have exposed at least one own meld. Opened opponents may fold or challenge. Unopened opponents automatically fold. If challenged, lowest deadwood wins. A challenger wins ties against the Draw caller; if both challengers tie, the one nearest in turn order to the caller wins.</p>
+      <h3>Stock Exhaustion</h3>
+      <p>When the last stock card is drawn, the current player finishes the turn, then opened players compare deadwood. Unopened players are burned and cannot win the low-point comparison. If tied, the last stock drawer wins if tied; otherwise the next tied player in turn order wins.</p>
+      <h3>Burn / Sunog</h3>
+      <p>Any non-winner with no exposed own meld when a round ends is burned. Burned players cannot challenge Draw, cannot win by stock-exhaustion low points, and pay a visible +10 app-score burn penalty. The app highlights burned players in the summary and status badges.</p>
+      <h3>Scoring In This App</h3>
+      <p>Deadwood is the lowest possible point total after grouping hidden hand melds. Aces are 1, 2-9 are face value, and 10/J/Q/K are 10. Winners gain app-score points from losers by deadwood difference with a minimum of 1, plus +10 for Tongits, +5 for a challenged Draw, +5 flat for folds, and +10 for each burned loser.</p>
+      <h3>Common Variations Not Used</h3>
+      <p>Some tables use jokers, four players, ace-high runs, secret four-of-a-kind or sagasa bonuses, spread instant wins, side pots, two-hit jackpots, or different burn penalties and tie-breakers. Those are documented here but not active in this implementation.</p>
+      <h3>Research References</h3>
+      <p><a href="https://www.pagat.com/rummy/tong-its.html" target="_blank" rel="noreferrer">Pagat Tong-Its</a>, <a href="https://gambiter.com/rummy/Tong-its.html" target="_blank" rel="noreferrer">Gambiter Tong-its</a>, <a href="https://www.tongitshub.com/blog/tongits-rules-guide" target="_blank" rel="noreferrer">TongitsHub Rules</a>, and <a href="https://www.tongitshub.com/blog/tongits-scoring-guide" target="_blank" rel="noreferrer">TongitsHub Scoring</a>.</p>
+    </article>
+  </div>
+
+  <div id="summary-panel" class="overlay" hidden>
+    <article class="modal summary-modal">
+      <h2 id="summary-title">Round Over</h2>
+      <div id="summary-content"></div>
+      <button id="next-round-btn" type="button">Next Round</button>
+    </article>
+  </div>
+
+  <div id="lobby-panel" class="overlay">
+    <article class="modal lobby-modal">
+      <h2 id="lobby-title">Multiplayer Lobby</h2>
+      <p id="lobby-copy">Enter your name and Render server URL, then create or join a 3-player room.</p>
+      <div class="lobby-meta">
+        <div class="lobby-chip">Room <strong id="lobby-room-code">-</strong></div>
+        <div class="lobby-chip">Seat <strong id="lobby-seat-label">-</strong></div>
+        <div class="lobby-chip">Host <strong id="lobby-host-label">-</strong></div>
+      </div>
+      <div id="lobby-seats" class="lobby-seats"></div>
+      <div class="lobby-actions">
+        <button id="copy-room-btn" type="button">Copy Room Code</button>
+        <button id="start-match-btn" type="button">Start Match</button>
+      </div>
+    </article>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="https://cdn.socket.io/4.8.1/socket.io.min.js" crossorigin="anonymous"></script>
+  <script src="game-logic.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
