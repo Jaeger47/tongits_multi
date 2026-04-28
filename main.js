@@ -766,10 +766,18 @@
   function renderLobbyOverlay() {
     const shouldShow = !roomInfo.code || !game || roomInfo.paused;
     els["lobby-panel"].hidden = !shouldShow;
+    const inLobbyRoom = Boolean(roomInfo.code);
+    const matchActive = Boolean(game);
+
+    els["player-name-input"].disabled = matchActive;
+    els["server-url-input"].disabled = inLobbyRoom;
+    els["room-code-input"].disabled = matchActive;
+    els["create-room-btn"].disabled = inLobbyRoom;
+    els["join-room-btn"].disabled = inLobbyRoom || matchActive;
 
     if (!roomInfo.code) {
       els["lobby-title"].textContent = "Multiplayer Lobby";
-      els["lobby-copy"].textContent = "Enter your name and Render server URL, then create or join a 3-player room.";
+      els["lobby-copy"].textContent = "Enter your name, confirm the server, then create or join a 3-player room.";
       els["lobby-room-code"].textContent = "-";
       els["lobby-seat-label"].textContent = "-";
       els["lobby-host-label"].textContent = "-";

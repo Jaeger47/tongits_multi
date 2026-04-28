@@ -119,7 +119,8 @@ h3 {
   gap: 8px;
 }
 
-.topbar-controls label {
+.topbar-controls label,
+.lobby-form label {
   display: grid;
   gap: 4px;
   color: var(--muted);
@@ -128,7 +129,8 @@ h3 {
 }
 
 select,
-.topbar-controls input {
+.topbar-controls input,
+.lobby-form input {
   min-height: 38px;
   border: 1px solid #34534c;
   border-radius: 6px;
@@ -137,7 +139,8 @@ select,
   padding: 6px 28px 6px 10px;
 }
 
-.topbar-controls input {
+.topbar-controls input,
+.lobby-form input {
   min-width: 164px;
   padding-right: 10px;
 }
@@ -711,11 +714,32 @@ body[data-card-theme="dark"] .stock-pile {
   width: min(760px, 100%);
 }
 
+.lobby-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.lobby-entry-actions,
 .lobby-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 14px;
+}
+
+.lobby-entry-actions button:first-child {
+  background: var(--yellow);
+  border-color: #d7aa18;
+  color: #211a04;
+  font-weight: 900;
+}
+
+.lobby-entry-actions button:last-child {
+  background: #172621;
+  color: #ffffff;
+  border-color: #34534c;
 }
 
 .lobby-chip {
@@ -1303,6 +1327,12 @@ body[data-card-theme="dark"] .stock-pile {
 
   .game-log {
     max-height: 260px;
+  }
+}
+
+@media (max-width: 840px) {
+  .lobby-form {
+    grid-template-columns: 1fr;
   }
 }
 
