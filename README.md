@@ -57,9 +57,13 @@ Tongits Table is now a browser-based 3-player Tongits multiplayer app with an ad
 
 9. In the player app:
    - Enter a player name.
-   - Enter the room code created by the admin.
+   - Make sure the `Server URL` points at the same app address.
+   - Pick a room from the live room list, or enter the room code created by the admin.
    - Click `Join Room`.
-   - The host clicks `Start Match` once all required human seats are connected.
+   - Ready rules:
+     - `1 human + 2 bots`: starts immediately after the human joins
+     - `2 humans + 1 bot`: both humans must click `Ready Up`, then the app starts a 5-second countdown
+     - `3 humans`: all three humans must click `Ready Up`, then the app starts a 5-second countdown
 
 For local testing, you can open the app in three tabs or three browser windows. Each tab now keeps its own player seat token, so one browser can simulate all 3 players.
 
@@ -143,9 +147,10 @@ Notes:
 - `Player Name`: your display name in the room
 - `Server URL`: where the Socket.IO game server is running
 - `Room Code`: the 6-character room code
+- `Game Rooms`: live room browser that lists admin-created rooms, seat usage, ready count, and countdown state
 - `Join Room`: join an existing lobby
 - `Leave Room`: leave the current lobby or match
-- `Start Match`: host-only button to begin the round
+- `Ready Up` / `Unready`: marks your seat ready before auto-start in 2-player and 3-player rooms
 - `Next Round`: host-only button shown after round end
 
 ### Admin Page
@@ -175,14 +180,18 @@ You can click cards to select them. You can also drag a selected card to the dis
 ## Match Flow
 
 1. An admin creates a room.
-2. The host starts the match.
-3. The server deals 13 cards to the dealer and 12 to the other two players.
-4. If the room uses bots, the remaining seats are filled by server-side bot players.
-5. Players take turns drawing, melding, sapaw, discarding, and calling endgame actions when legal.
-6. The server resolves bot turns, Tongits, Draw, stock exhaustion, scoring, and burn/sunog.
-7. After the round summary, the host can start the next round.
+2. Players join from the live room browser or with a shared room code.
+3. The room starts using the configured lobby rule:
+   - `1 human + 2 bots`: immediate start
+   - `2 humans + 1 bot`: both humans ready, then 5-second countdown
+   - `3 humans`: all humans ready, then 5-second countdown
+4. The server deals 13 cards to the dealer and 12 to the other two players.
+5. If the room uses bots, the remaining seats are filled by server-side bot players.
+6. Players take turns drawing, melding, sapaw, discarding, and calling endgame actions when legal.
+7. The server resolves bot turns, Tongits, Draw, stock exhaustion, scoring, and burn/sunog.
+8. After the round summary, the host can start the next round.
 
-If a player disconnects during an active match, the room pauses until that player reconnects. If a player disconnects in the lobby before the match starts, the seat is released so someone else can join.
+If a player disconnects during an active match, the room pauses until that player reconnects. If a player disconnects in the lobby before the match starts, the seat is released so someone else can join. If the last human leaves a lobby room, that room closes immediately.
 
 ## Rules Implemented
 
@@ -232,6 +241,8 @@ The app compares the lowest possible deadwood after grouping hidden hand melds. 
 ## Visual And Audio Notes
 
 - Sound effects are generated with the browser Web Audio API.
+- Lobby and match sound cues include room join, ready, unready, countdown start, countdown ticks, match start, room closed, and the existing gameplay actions.
+- Background poker-style table music is generated in the browser and can be toggled with `Music: On/Off`.
 - Action-specific animations are triggered from game events in `main.js`.
 - The card graphics can be switched between `Classic` and `Dark`.
 
@@ -241,11 +252,13 @@ The multiplayer conversion was smoke-tested locally for:
 
 - admin login
 - admin room creation
+- live room list broadcast to connected clients
 - room join
-- host start
-- bot-enabled room start with `1 human + 2 bots`
+- immediate start for `1 human + 2 bots`
+- ready gating and 5-second countdown for `2 humans + 1 bot`
+- ready gating and 5-second countdown for `3 humans`
+- lobby room auto-close when the last human leaves
 - bot turn progression after a human action
-- mixed room readiness with `2 humans + 1 bot`
 - turn state broadcast after a legal action
 - disconnect pause during an active match
 - reconnect resume into the same seat

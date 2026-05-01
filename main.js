@@ -9,6 +9,7 @@
   let socket = null;
   let socketUrl = "";
   let roomInfo = createEmptyRoomInfo();
+  let publicRooms = [];
   let game = null;
   let selected = new Set();
   let handGroupingEnabled = false;
@@ -16,11 +17,16 @@
   let connectionText = "Disconnected from server.";
   let lastHandledEventId = 0;
   let resumeAttempted = false;
+  let uiTicker = null;
+  let lastLobbyCountdownSecond = null;
 
   class AudioEngine {
     constructor() {
       this.ctx = null;
       this.enabled = false;
+      this.musicEnabled = localStorage.getItem("tongitsMusicEnabled") !== "off";
+      this.musicTimer = null;
+      this.musicCursor = 0;
     }
 
     unlock() {
@@ -31,6 +37,13 @@
       }
       this.enabled = true;
       if (this.ctx.state === "suspended") this.ctx.resume();
+      this.updateMusicState();
+    }
+
+    setMusicEnabled(enabled) {
+      this.musicEnabled = Boolean(enabled);
+      localStorage.setItem("tongitsMusicEnabled", this.musicEnabled ? "on" : "off");
+      this.updateMusicState();
     }
 
     tone(freq, duration, type, gainValue) {
@@ -64,6 +77,76 @@
       source.stop(this.ctx.currentTime + duration);
     }
 
+    updateMusicState() {
+      if (!this.ctx || !this.enabled) return;
+      if (!this.musicEnabled) {
+        if (this.musicTimer) clearInterval(this.musicTimer);
+        this.musicTimer = null;
+        return;
+      }
+      if (this.musicTimer) return;
+      this.musicCursor = this.ctx.currentTime + 0.08;
+      this.scheduleMusicBar();
+      this.musicTimer = window.setInterval(() => this.scheduleMusicBar(), 3800);
+    }
+
+    scheduleMusicBar() {
+      if (!this.enabled || !this.ctx || !this.musicEnabled) return;
+      const start = Math.max(this.musicCursor, this.ctx.currentTime + 0.05);
+      const chords = [
+        [174.61, 220.0, 261.63],
+        [164.81, 207.65, 246.94],
+        [146.83, 196.0, 246.94],
+        [155.56, 196.0, 233.08]
+      ];
+
+      chords.forEach((chord, index) => {
+        const beatStart = start + index * 0.95;
+        chord.forEach((freq, noteIndex) => this.toneAt(freq, beatStart + noteIndex * 0.01, 0.72, "triangle", 0.012));
+        this.toneAt(chord[0] / 2, beatStart, 0.26, "sine", 0.024);
+        this.toneAt(chord[0] / 2, beatStart + 0.48, 0.22, "sine", 0.018);
+        this.noiseAt(beatStart + 0.22, 0.04, 0.006);
+        this.noiseAt(beatStart + 0.72, 0.04, 0.005);
+      });
+
+      this.musicCursor = start + 3.8;
+    }
+
+    toneAt(freq, startTime, duration, type, gainValue) {
+      if (!this.enabled || !this.ctx) return;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = type || "sine";
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(Math.max(0.0001, gainValue || 0.01), startTime);
+      gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(startTime);
+      osc.stop(startTime + duration);
+    }
+
+    noiseAt(startTime, duration, gainValue) {
+      if (!this.enabled || !this.ctx) return;
+      const sampleRate = this.ctx.sampleRate;
+      const buffer = this.ctx.createBuffer(1, Math.max(1, Math.floor(sampleRate * duration)), sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i += 1) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+      const source = this.ctx.createBufferSource();
+      const filter = this.ctx.createBiquadFilter();
+      const gain = this.ctx.createGain();
+      filter.type = "highpass";
+      filter.frequency.value = 2600;
+      gain.gain.setValueAtTime(Math.max(0.0001, gainValue || 0.004), startTime);
+      gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+      source.buffer = buffer;
+      source.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.ctx.destination);
+      source.start(startTime);
+      source.stop(startTime + duration);
+    }
+
     play(type) {
       if (!this.enabled || !this.ctx) return;
       if (type === "shuffle") this.noise(0.28, 0.035);
@@ -73,6 +156,9 @@
       else if (type === "meld" || type === "sapaw") {
         this.tone(560, 0.09, "triangle", 0.04);
         setTimeout(() => this.tone(760, 0.08, "triangle", 0.035), 70);
+      } else if (type === "turn") {
+        this.tone(360, 0.05, "triangle", 0.026);
+        setTimeout(() => this.tone(440, 0.05, "triangle", 0.02), 60);
       } else if (type === "win") {
         this.tone(520, 0.12, "triangle", 0.045);
         setTimeout(() => this.tone(660, 0.14, "triangle", 0.045), 90);
@@ -81,6 +167,27 @@
         this.tone(120, 0.16, "sawtooth", 0.035);
       } else if (type === "fold" || type === "challenge" || type === "draw-call") {
         this.tone(320, 0.08, "triangle", 0.04);
+      } else if (type === "click") {
+        this.tone(680, 0.04, "square", 0.018);
+      } else if (type === "join-room") {
+        this.tone(420, 0.05, "triangle", 0.026);
+        setTimeout(() => this.tone(540, 0.08, "triangle", 0.026), 60);
+      } else if (type === "ready") {
+        this.tone(520, 0.05, "triangle", 0.024);
+        setTimeout(() => this.tone(680, 0.08, "triangle", 0.024), 60);
+      } else if (type === "unready") {
+        this.tone(300, 0.06, "triangle", 0.022);
+      } else if (type === "countdown-start") {
+        this.tone(540, 0.08, "triangle", 0.03);
+        setTimeout(() => this.tone(620, 0.08, "triangle", 0.03), 80);
+      } else if (type === "countdown-tick") {
+        this.tone(740, 0.05, "sine", 0.018);
+      } else if (type === "match-start") {
+        this.tone(460, 0.08, "triangle", 0.032);
+        setTimeout(() => this.tone(620, 0.1, "triangle", 0.03), 70);
+        setTimeout(() => this.tone(820, 0.12, "triangle", 0.03), 150);
+      } else if (type === "room-closed") {
+        this.tone(180, 0.14, "sawtooth", 0.03);
       }
     }
   }
@@ -98,13 +205,16 @@
       isHost: false,
       canStart: false,
       humanSeatCount: 3,
+      connectedHumanSeatCount: 0,
       readyHumanSeatCount: 0,
       joinedHumanSeatCount: 0,
       botSeatCount: 0,
+      countdownEndsAt: null,
+      countdownSecondsLeft: 0,
       seats: [
-        { index: 0, type: "human", difficulty: "human", name: "Open seat 1", connected: false, occupied: false, isBot: false },
-        { index: 1, type: "human", difficulty: "human", name: "Open seat 2", connected: false, occupied: false, isBot: false },
-        { index: 2, type: "human", difficulty: "human", name: "Open seat 3", connected: false, occupied: false, isBot: false }
+        { index: 0, type: "human", difficulty: "human", name: "Open seat 1", connected: false, occupied: false, isBot: false, ready: false },
+        { index: 1, type: "human", difficulty: "human", name: "Open seat 2", connected: false, occupied: false, isBot: false, ready: false },
+        { index: 2, type: "human", difficulty: "human", name: "Open seat 3", connected: false, occupied: false, isBot: false, ready: false }
       ]
     };
   }
@@ -116,12 +226,14 @@
   function cacheEls() {
     [
       "player-name-input",
+      "card-table",
       "server-url-input",
       "room-code-input",
       "create-room-btn",
       "join-room-btn",
       "leave-room-btn",
       "card-theme-select",
+      "music-toggle-btn",
       "rules-btn",
       "close-rules-btn",
       "rules-panel",
@@ -136,6 +248,8 @@
       "lobby-seat-label",
       "lobby-host-label",
       "lobby-seats",
+      "room-directory-status",
+      "room-directory",
       "copy-room-btn",
       "start-match-btn",
       "connection-status",
@@ -176,6 +290,10 @@
     localStorage.setItem("tongitsCardTheme", els["card-theme-select"].value);
   }
 
+  function updateMusicButton() {
+    els["music-toggle-btn"].textContent = `Music: ${audio.musicEnabled ? "On" : "Off"}`;
+  }
+
   function playerToken() {
     let token = sessionStorage.getItem("tongitsPlayerToken");
     if (!token) {
@@ -191,8 +309,12 @@
     return String(els["player-name-input"].value || "").trim().slice(0, 24) || "Player";
   }
 
+  function normalizeRoomCode(value) {
+    return String(value || "").trim().toUpperCase().slice(0, 6);
+  }
+
   function normalizedRoomCode() {
-    return String(els["room-code-input"].value || "").trim().toUpperCase().slice(0, 6);
+    return normalizeRoomCode(els["room-code-input"].value);
   }
 
   function configuredServerUrl() {
@@ -219,6 +341,7 @@
     els["room-code-input"].value = localStorage.getItem("tongitsRoomCode") || "";
     els["card-theme-select"].value = localStorage.getItem("tongitsCardTheme") || "classic";
     applyCardTheme();
+    updateMusicButton();
   }
 
   function setFeedback(message) {
@@ -252,6 +375,15 @@
     const text = String(value || "");
     if (!text) return "";
     return text.charAt(0).toUpperCase() + text.slice(1);
+  }
+
+  function countdownSecondsFromEndsAt(endsAt) {
+    if (!endsAt) return 0;
+    return Math.max(0, Math.ceil((endsAt - Date.now()) / 1000));
+  }
+
+  function roomCountdownValue(room) {
+    return room && room.countdownEndsAt ? countdownSecondsFromEndsAt(room.countdownEndsAt) : 0;
   }
 
   function renderCard(card, opts) {
@@ -487,7 +619,9 @@
   function renderMultiplayerStatus() {
     const roomText = roomInfo.code
       ? `Room ${roomInfo.code} - ${roomInfo.started ? (roomInfo.paused ? "paused" : "in match") : "in lobby"}`
-      : "Not in a room yet.";
+      : configuredServerUrl()
+        ? `${publicRooms.length} room${publicRooms.length === 1 ? "" : "s"} available.`
+        : "Enter your server URL to browse rooms.";
     els["connection-status"].textContent = connectionText;
     els["room-status"].textContent = roomText;
   }
@@ -511,7 +645,10 @@
       const seatTitle = seat ? seat.name : `Open seat ${seatIndex + 1}`;
       let seatMeta = "Waiting for player";
       if (seat && seat.isBot) seatMeta = `Bot - ${titleCase(seat.difficulty)}`;
-      else if (seat && seat.occupied) seatMeta = seat.connected ? "Waiting in lobby" : "Disconnected";
+      else if (seat && seat.occupied) {
+        if (seat.connected && seat.ready) seatMeta = "Ready";
+        else seatMeta = seat.connected ? "Waiting in lobby" : "Disconnected";
+      }
       panel.className = `player-panel ${slot === 0 ? "human-panel" : "opponent-panel"}`;
       panel.innerHTML = `
         <div class="player-head">
@@ -523,6 +660,7 @@
             ${roomInfo.mySeatIndex === seatIndex ? '<span class="badge turn">You</span>' : ""}
             ${roomInfo.hostSeatIndex === seatIndex ? '<span class="badge">Host</span>' : ""}
             ${seat && seat.isBot ? '<span class="badge">Bot</span>' : ""}
+            ${seat && seat.ready && !seat.isBot ? '<span class="badge">Ready</span>' : ""}
           </div>
         </div>
         <div class="opponent-hand"></div>
@@ -584,11 +722,20 @@
 
   function renderTurnBanner() {
     if (!roomInfo.code) {
-      els["turn-banner"].textContent = "Connect to your game server and join a room created by the admin.";
+      els["turn-banner"].textContent = publicRooms.length
+        ? "Choose a room from the list below, or enter a room code to join directly."
+        : "Waiting for the admin to create a room.";
       return;
     }
     if (!game) {
-      els["turn-banner"].textContent = `Lobby ${roomInfo.code}: ${roomInfo.readyHumanSeatCount}/${roomInfo.humanSeatCount} human seats ready.`;
+      const countdown = roomCountdownValue(roomInfo);
+      if (countdown) {
+        els["turn-banner"].textContent = `Room ${roomInfo.code}: all required players are ready. Match starts in ${countdown}...`;
+      } else if (roomInfo.humanSeatCount === 1 && roomInfo.joinedHumanSeatCount === 1) {
+        els["turn-banner"].textContent = `Room ${roomInfo.code}: single-player bot match is starting immediately.`;
+      } else {
+        els["turn-banner"].textContent = `Room ${roomInfo.code}: ${roomInfo.readyHumanSeatCount}/${roomInfo.humanSeatCount} human players ready.`;
+      }
       return;
     }
     if (roomInfo.paused) {
@@ -683,6 +830,7 @@
     els["auto-group-btn"].disabled = !game;
     els["auto-group-btn"].textContent = `Auto Group: ${handGroupingEnabled ? "On" : "Off"}`;
     els["leave-room-btn"].disabled = !roomInfo.code;
+    els["music-toggle-btn"].textContent = `Music: ${audio.musicEnabled ? "On" : "Off"}`;
 
     const responder = game ? game.getCurrentDrawResponder() : null;
     const humanResponding = Boolean(game && state.pendingDraw && responder === roomInfo.mySeatIndex);
@@ -776,6 +924,84 @@
     els["summary-panel"].hidden = false;
   }
 
+  function renderRoomDirectory() {
+    const hasServerUrl = Boolean(configuredServerUrl());
+    const socketConnected = Boolean(socket && socket.connected);
+
+    if (!hasServerUrl) {
+      els["room-directory-status"].textContent = "Enter the server URL to load rooms.";
+    } else if (!socketConnected) {
+      els["room-directory-status"].textContent = connectionText;
+    } else {
+      els["room-directory-status"].textContent = publicRooms.length
+        ? `${publicRooms.length} room${publicRooms.length === 1 ? "" : "s"} online`
+        : "No rooms online yet";
+    }
+
+    if (!publicRooms.length) {
+      const emptyTitle = !hasServerUrl
+        ? "Server URL needed"
+        : socketConnected
+          ? "No rooms yet"
+          : "Connecting";
+      const emptyCopy = !hasServerUrl
+        ? "Enter the server URL above to browse live rooms."
+        : socketConnected
+          ? "Waiting for the admin to create a table."
+          : connectionText;
+      els["room-directory"].innerHTML = `<div class="room-directory-card"><div class="room-directory-title">${escapeHtml(emptyTitle)}</div><div class="player-meta">${escapeHtml(emptyCopy)}</div></div>`;
+      return;
+    }
+
+    els["room-directory"].innerHTML = publicRooms
+      .map((room) => {
+        const countdown = roomCountdownValue(room);
+        const canJoin = !roomInfo.code && room.canJoin && !room.started;
+        const status = room.started
+          ? (room.paused ? "Paused match" : "Match in progress")
+          : countdown
+            ? `Starting in ${countdown}`
+            : room.canJoin
+              ? "Open seats"
+              : "Room full";
+        const classes = [
+          "room-directory-card",
+          room.started ? "locked" : "",
+          !room.canJoin && !room.started ? "full" : ""
+        ].filter(Boolean).join(" ");
+        const tags = [
+          `<span class="room-tag">${room.joinedHumanSeatCount}/${room.humanSeatCount} humans</span>`,
+          room.botSeatCount ? `<span class="room-tag">${room.botSeatCount} bot${room.botSeatCount === 1 ? "" : "s"}</span>` : "",
+          room.readyHumanSeatCount ? `<span class="room-tag">${room.readyHumanSeatCount} ready</span>` : "",
+          countdown ? `<span class="room-tag countdown">${countdown}s</span>` : ""
+        ].filter(Boolean).join("");
+
+        return `<section class="${classes}">
+          <div class="room-directory-head">
+            <div>
+              <div class="room-directory-title">Room ${escapeHtml(room.code)}</div>
+              <div class="room-directory-code">${escapeHtml(status)}</div>
+            </div>
+            <div class="room-directory-tags">${tags}</div>
+          </div>
+          <div class="room-directory-meta">
+            ${room.seats.map((seat) => `<span class="room-tag">${escapeHtml(seat.name)}${seat.isBot ? ` (${titleCase(seat.difficulty)})` : seat.ready ? " ready" : ""}</span>`).join("")}
+          </div>
+          <div class="room-directory-actions">
+            <button class="join-room-option-btn" type="button" data-room-code="${room.code}" ${canJoin ? "" : "disabled"}>${canJoin ? "Join Room" : "Unavailable"}</button>
+          </div>
+        </section>`;
+      })
+      .join("");
+
+    document.querySelectorAll(".join-room-option-btn").forEach((button) => {
+      button.addEventListener("click", () => {
+        els["room-code-input"].value = button.dataset.roomCode || "";
+        joinRoom(button.dataset.roomCode || "");
+      });
+    });
+  }
+
   function renderLobbyOverlay() {
     const shouldShow = !roomInfo.code || !game || roomInfo.paused;
     els["lobby-panel"].hidden = !shouldShow;
@@ -788,16 +1014,18 @@
     els["create-room-btn"].disabled = true;
     els["join-room-btn"].disabled = inLobbyRoom || matchActive;
 
+    renderRoomDirectory();
+
     if (!roomInfo.code) {
       els["lobby-title"].textContent = "Multiplayer Lobby";
-      els["lobby-copy"].textContent = "Enter your name, confirm the server, then join a room code created by the admin.";
+      els["lobby-copy"].textContent = "Pick a room like an online game list, or enter a code if the admin shared one directly.";
       els["lobby-room-code"].textContent = "Admin";
       els["lobby-seat-label"].textContent = "-";
       els["lobby-host-label"].textContent = "-";
       els["lobby-seats"].innerHTML = [0, 1, 2].map((seatIndex) => `<div class="lobby-seat"><strong>Seat ${seatIndex + 1}</strong><span>Waiting for room setup</span></div>`).join("");
       els["copy-room-btn"].disabled = true;
       els["start-match-btn"].disabled = true;
-      els["start-match-btn"].textContent = "Start Match";
+      els["start-match-btn"].textContent = "Ready Up";
       return;
     }
 
@@ -807,12 +1035,18 @@
     els["lobby-host-label"].textContent = hostSeat ? hostSeat.name : "-";
 
     if (!game) {
+      const mySeat = roomInfo.mySeatIndex === null || roomInfo.mySeatIndex === undefined ? null : roomInfo.seats[roomInfo.mySeatIndex];
+      const countdown = roomCountdownValue(roomInfo);
       els["lobby-title"].textContent = `Room ${roomInfo.code}`;
-      els["lobby-copy"].textContent = roomInfo.canStart
-        ? "All required human seats are ready. Host can start the match now."
-        : `Waiting for ${roomInfo.readyHumanSeatCount}/${roomInfo.humanSeatCount} human seats to be ready before the host can start.`;
-      els["start-match-btn"].disabled = !(roomInfo.isHost && roomInfo.canStart);
-      els["start-match-btn"].textContent = roomInfo.isHost ? "Start Match" : (roomInfo.hostSeatIndex === null ? "Waiting For First Player" : "Host Starts Match");
+      if (countdown) {
+        els["lobby-copy"].textContent = `Everybody is ready. Match starts in ${countdown} second${countdown === 1 ? "" : "s"}.`;
+      } else if (roomInfo.humanSeatCount === 1 && roomInfo.joinedHumanSeatCount === 1) {
+        els["lobby-copy"].textContent = "Single-player bot room detected. Match is starting immediately.";
+      } else {
+        els["lobby-copy"].textContent = `Ready players: ${roomInfo.readyHumanSeatCount}/${roomInfo.humanSeatCount}. All human seats must ready up before the 5-second countdown begins.`;
+      }
+      els["start-match-btn"].disabled = !mySeat || roomInfo.humanSeatCount === 1 || Boolean(countdown);
+      els["start-match-btn"].textContent = mySeat && mySeat.ready ? "Unready" : "Ready Up";
     } else {
       els["lobby-title"].textContent = `Room ${roomInfo.code} Paused`;
       els["lobby-copy"].textContent = roomInfo.pauseReason || "Waiting for every player to reconnect.";
@@ -822,10 +1056,10 @@
 
     els["copy-room-btn"].disabled = false;
     els["lobby-seats"].innerHTML = roomInfo.seats
-      .map((seat) => `<div class="lobby-seat ${seat.occupied ? "" : "open"} ${seat.index === roomInfo.mySeatIndex ? "mine" : ""}">
+      .map((seat) => `<div class="lobby-seat ${seat.occupied ? "" : "open"} ${seat.index === roomInfo.mySeatIndex ? "mine" : ""} ${seat.ready && !seat.isBot ? "ready" : ""}">
         <strong>Seat ${seat.index + 1}</strong>
         <span>${escapeHtml(seat.name)}</span>
-        <small>${seat.isBot ? `Bot - ${escapeHtml(titleCase(seat.difficulty))}` : (seat.occupied ? (seat.connected ? "Connected" : "Disconnected") : "Waiting for player")}</small>
+        <small>${seat.isBot ? `Bot - ${escapeHtml(titleCase(seat.difficulty))}` : (seat.occupied ? (seat.connected ? (seat.ready ? "Ready" : "Connected") : "Disconnected") : "Waiting for player")}</small>
       </div>`)
       .join("");
   }
@@ -995,19 +1229,26 @@
   }
 
   function applySnapshot(snapshot) {
+    const previousRoom = roomInfo;
     roomInfo = snapshot.room || createEmptyRoomInfo();
     game = snapshot.game ? wrapGame(snapshot.game) : null;
     localStorage.setItem("tongitsRoomCode", roomInfo.code || "");
     if (!game) selected.clear();
+    if (!previousRoom.code && roomInfo.code) audio.play("join-room");
+    if (previousRoom.code && !roomInfo.code) audio.play("room-closed");
+    if (!previousRoom.started && roomInfo.started) audio.play("match-start");
     render();
   }
 
   function resetRoomState(message) {
+    const wasInRoom = Boolean(roomInfo.code);
     roomInfo = createEmptyRoomInfo();
     game = null;
     selected.clear();
     lastHandledEventId = 0;
+    lastLobbyCountdownSecond = null;
     clearSavedRoom();
+    if (wasInRoom) audio.play("room-closed");
     if (message) setFeedback(message);
     render(false);
   }
@@ -1062,11 +1303,41 @@
       applySnapshot(snapshot);
     });
 
+    socket.on("rooms:update", (rooms) => {
+      publicRooms = Array.isArray(rooms) ? rooms : [];
+      render(false);
+    });
+
     socket.on("room:closed", (payload) => {
       resetRoomState(payload && payload.message ? payload.message : "The room was closed.");
     });
 
     return socket;
+  }
+
+  function connectToConfiguredServer() {
+    const url = configuredServerUrl();
+    saveClientPrefs();
+
+    if (!url) {
+      if (socket) {
+        socket.removeAllListeners();
+        socket.disconnect();
+      }
+      socket = null;
+      socketUrl = "";
+      publicRooms = [];
+      connectionText = "Enter your server URL to browse rooms.";
+      render(false);
+      return;
+    }
+
+    try {
+      ensureSocket();
+    } catch (error) {
+      connectionText = error.message;
+      render(false);
+    }
   }
 
   function emitWithAck(event, payload) {
@@ -1092,6 +1363,7 @@
   async function createRoom() {
     try {
       audio.unlock();
+      audio.play("click");
       saveClientPrefs();
       const response = await emitWithAck("lobby:create", {
         token: playerToken(),
@@ -1105,14 +1377,15 @@
     }
   }
 
-  async function joinRoom() {
-    const roomCode = normalizedRoomCode();
+  async function joinRoom(roomCodeOverride) {
+    const roomCode = normalizeRoomCode(roomCodeOverride || normalizedRoomCode());
     if (!roomCode) {
       setFeedback("Enter a room code first.");
       return;
     }
     try {
       audio.unlock();
+      audio.play("click");
       saveClientPrefs();
       await emitWithAck("lobby:join", {
         roomCode,
@@ -1130,6 +1403,7 @@
     if (!roomInfo.code) return;
     try {
       audio.unlock();
+      audio.play("click");
       await emitWithAck("lobby:leave", {
         roomCode: roomInfo.code,
         token: playerToken()
@@ -1140,15 +1414,21 @@
     }
   }
 
-  async function startMatch() {
+  async function toggleReady() {
     if (!roomInfo.code) return;
+    const mySeat = roomInfo.mySeatIndex === null || roomInfo.mySeatIndex === undefined ? null : roomInfo.seats[roomInfo.mySeatIndex];
+    if (!mySeat || roomInfo.humanSeatCount === 1 || game) return;
     try {
       audio.unlock();
-      await emitWithAck("lobby:start", {
+      audio.play("click");
+      const nextReady = !mySeat.ready;
+      await emitWithAck("lobby:setReady", {
         roomCode: roomInfo.code,
-        token: playerToken()
+        token: playerToken(),
+        ready: nextReady
       });
-      setFeedback("Match starting...");
+      audio.play(nextReady ? "ready" : "unready");
+      setFeedback(nextReady ? "You are ready." : "You are no longer ready.");
     } catch (error) {
       setFeedback(error.message);
     }
@@ -1158,6 +1438,7 @@
     if (!roomInfo.code) return;
     try {
       audio.unlock();
+      audio.play("click");
       await emitWithAck("room:nextRound", {
         roomCode: roomInfo.code,
         token: playerToken()
@@ -1171,6 +1452,7 @@
   async function copyRoomCode() {
     if (!roomInfo.code) return;
     try {
+      audio.play("click");
       await navigator.clipboard.writeText(roomInfo.code);
       setFeedback(`Copied room code ${roomInfo.code}.`);
     } catch (_error) {
@@ -1192,6 +1474,13 @@
     } catch (error) {
       setFeedback(error.message);
     }
+  }
+
+  function toggleMusic() {
+    audio.unlock();
+    audio.setMusicEnabled(!audio.musicEnabled);
+    updateMusicButton();
+    audio.play("click");
   }
 
   function readDraggedIds(event) {
@@ -1305,12 +1594,15 @@
     els["create-room-btn"].addEventListener("click", createRoom);
     els["join-room-btn"].addEventListener("click", joinRoom);
     els["leave-room-btn"].addEventListener("click", leaveRoom);
-    els["start-match-btn"].addEventListener("click", startMatch);
+    els["start-match-btn"].addEventListener("click", toggleReady);
     els["copy-room-btn"].addEventListener("click", copyRoomCode);
     els["next-round-btn"].addEventListener("click", nextRound);
+    els["music-toggle-btn"].addEventListener("click", toggleMusic);
 
     els["player-name-input"].addEventListener("change", saveClientPrefs);
-    els["server-url-input"].addEventListener("change", saveClientPrefs);
+    els["server-url-input"].addEventListener("change", () => {
+      connectToConfiguredServer();
+    });
     els["room-code-input"].addEventListener("change", () => {
       els["room-code-input"].value = normalizedRoomCode();
       saveClientPrefs();
@@ -1323,10 +1615,12 @@
 
     els["rules-btn"].addEventListener("click", () => {
       audio.unlock();
+      audio.play("click");
       els["rules-panel"].hidden = false;
     });
 
     els["close-rules-btn"].addEventListener("click", () => {
+      audio.play("click");
       els["rules-panel"].hidden = true;
     });
 
@@ -1360,6 +1654,7 @@
     });
 
     els["auto-group-btn"].addEventListener("click", () => {
+      audio.play("click");
       handGroupingEnabled = !handGroupingEnabled;
       render(false);
     });
@@ -1395,10 +1690,27 @@
     });
   }
 
+  function tickUi() {
+    const countdown = !game ? roomCountdownValue(roomInfo) : 0;
+    if (countdown !== lastLobbyCountdownSecond) {
+      if (countdown && countdown < 5) audio.play("countdown-tick");
+      if (!lastLobbyCountdownSecond && countdown) audio.play("countdown-start");
+      lastLobbyCountdownSecond = countdown || null;
+      render(false);
+      return;
+    }
+
+    if (!roomInfo.code && publicRooms.some((room) => room.countdownEndsAt)) {
+      render(false);
+    }
+  }
+
   function init() {
     cacheEls();
     initFormDefaults();
     bindStaticEvents();
+    uiTicker = window.setInterval(tickUi, 500);
+    connectToConfiguredServer();
     render(false);
   }
 

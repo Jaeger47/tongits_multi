@@ -115,6 +115,7 @@
   }
 
   function roomStatus(room) {
+    if (room.countdownSecondsLeft) return `Starting in ${room.countdownSecondsLeft}`;
     if (!room.started) return room.canStart ? "Ready to start" : "Waiting in lobby";
     if (room.paused) return "Paused";
     if (room.roundOver) return "Round over";
@@ -140,7 +141,8 @@
           `<span class="tag">${room.botPlayers} bot</span>`,
           room.started ? `<span class="tag live">${room.phase || "Live"}</span>` : '<span class="tag">Lobby</span>',
           room.paused ? '<span class="tag pause">Paused</span>' : "",
-          room.canStart ? '<span class="tag live">Ready</span>' : ""
+          room.canStart ? '<span class="tag live">Ready</span>' : "",
+          room.countdownSecondsLeft ? `<span class="tag live">${room.countdownSecondsLeft}s</span>` : ""
         ].filter(Boolean).join("");
 
         const seats = room.seats

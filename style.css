@@ -729,6 +729,96 @@ body[data-card-theme="dark"] .stock-pile {
   margin-bottom: 14px;
 }
 
+.room-browser-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 10px;
+  color: #dff1ec;
+  font-size: .88rem;
+  font-weight: 800;
+}
+
+.room-browser-head span {
+  color: var(--muted);
+  font-weight: 700;
+  font-size: .78rem;
+}
+
+.room-directory {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+  max-height: 260px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.room-directory-card {
+  border: 1px solid #2f554a;
+  border-radius: 8px;
+  background: #10231e;
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.room-directory-card.full,
+.room-directory-card.locked {
+  opacity: .72;
+}
+
+.room-directory-head,
+.room-directory-meta,
+.room-directory-actions,
+.room-directory-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.room-directory-head {
+  justify-content: space-between;
+}
+
+.room-directory-title {
+  color: #ffffff;
+  font-size: .94rem;
+  font-weight: 900;
+}
+
+.room-directory-code {
+  color: var(--muted);
+  font-size: .76rem;
+  font-weight: 700;
+}
+
+.room-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  border: 1px solid #34564c;
+  border-radius: 999px;
+  background: #172a24;
+  color: #d2ebe4;
+  padding: 4px 10px;
+  font-size: .72rem;
+  font-weight: 800;
+}
+
+.room-tag.countdown {
+  border-color: rgba(244, 196, 48, .76);
+  color: #ffe7a0;
+}
+
+.room-directory-actions button {
+  min-height: 32px;
+  padding: 5px 10px;
+  font-size: .76rem;
+}
+
 .lobby-entry-actions button:first-child {
   background: var(--yellow);
   border-color: #d7aa18;
@@ -777,6 +867,11 @@ body[data-card-theme="dark"] .stock-pile {
 .lobby-seat.mine {
   border-color: rgba(244, 196, 48, .76);
   box-shadow: 0 0 0 1px rgba(244, 196, 48, .14);
+}
+
+.lobby-seat.ready {
+  border-color: rgba(13, 152, 125, .86);
+  box-shadow: 0 0 0 1px rgba(13, 152, 125, .18);
 }
 
 .lobby-seat strong {

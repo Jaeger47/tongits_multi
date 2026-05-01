@@ -15,6 +15,7 @@ const ROOM_SIZE = 3;
 const ROOM_CODE_LENGTH = 6;
 const BOT_ACTION_DELAY_MS = 1250;
 const BOT_RESPONSE_DELAY_MS = 900;
+const READY_COUNTDOWN_MS = 5000;
 const ADMIN_PASSWORD = String(process.env.ADMIN_PASSWORD || "Dacer_2026!");
 const BOT_NAMES_BY_SEAT = ["Bot One", "Maya", "Lito"];
 
@@ -107,6 +108,7 @@ function makeHumanSeat(index) {
     token: null,
     socketId: null,
     connected: false,
+    ready: false,
     name: `Open seat ${index + 1}`,
     difficulty: "human"
   };
@@ -119,13 +121,10 @@ function makeBotSeat(index, difficulty) {
     token: null,
     socketId: null,
     connected: true,
+    ready: true,
     name: BOT_NAMES_BY_SEAT[index] || `Bot ${index + 1}`,
     difficulty: normalizeDifficulty(difficulty)
   };
-}
-
-function seatOccupied(seat) {
-  return seat.type === "bot" || Boolean(seat.token);
 }
 
 function isHumanSeat(seat) {
@@ -136,6 +135,10 @@ function isBotSeat(seat) {
   return seat.type === "bot";
 }
 
+function seatOccupied(seat) {
+  return isBotSeat(seat) || Boolean(seat.token);
+}
+
 function humanSeats(room) {
   return room.seats.filter(isHumanSeat);
 }
@@ -144,8 +147,12 @@ function joinedHumanSeatsCount(room) {
   return humanSeats(room).filter((seat) => seat.token).length;
 }
 
-function readyHumanSeatsCount(room) {
+function connectedHumanSeatsCount(room) {
   return humanSeats(room).filter((seat) => seat.token && seat.connected).length;
+}
+
+function readyHumanSeatsCount(room) {
+  return humanSeats(room).filter((seat) => seat.token && seat.connected && seat.ready).length;
 }
 
 function humanSeatCount(room) {
@@ -154,11 +161,6 @@ function humanSeatCount(room) {
 
 function botSeatCount(room) {
   return room.seats.filter(isBotSeat).length;
-}
-
-function canStartRoom(room) {
-  const humanCount = humanSeatCount(room);
-  return !room.game && humanCount > 0 && readyHumanSeatsCount(room) === humanCount;
 }
 
 function getHostSeatIndex(room) {
@@ -185,6 +187,7 @@ function clearHumanSeat(seat) {
   seat.token = null;
   seat.socketId = null;
   seat.connected = false;
+  seat.ready = false;
   seat.name = `Open seat ${seat.index + 1}`;
 }
 
@@ -213,6 +216,8 @@ function makeRoom(payload) {
     pauseReason: "",
     botTimer: null,
     botBusy: false,
+    countdownTimer: null,
+    countdownEndsAt: null,
     config: {
       humanPlayers,
       botDifficulty
@@ -236,6 +241,27 @@ function getCurrentDrawResponder(state) {
   return pending.responderOrder[pending.position];
 }
 
+function countdownSecondsLeft(room) {
+  return room.countdownEndsAt ? Math.max(0, Math.ceil((room.countdownEndsAt - Date.now()) / 1000)) : 0;
+}
+
+function canSingleHumanAutostart(room) {
+  return !room.game && humanSeatCount(room) === 1 && joinedHumanSeatsCount(room) === 1 && connectedHumanSeatsCount(room) === 1;
+}
+
+function canStartReadyCountdown(room) {
+  const humans = humanSeatCount(room);
+  return !room.game &&
+    humans > 1 &&
+    joinedHumanSeatsCount(room) === humans &&
+    connectedHumanSeatsCount(room) === humans &&
+    readyHumanSeatsCount(room) === humans;
+}
+
+function hasNoJoinedHumans(room) {
+  return joinedHumanSeatsCount(room) === 0;
+}
+
 function sanitizeSeatForClient(seat) {
   return {
     index: seat.index,
@@ -244,7 +270,8 @@ function sanitizeSeatForClient(seat) {
     connected: isBotSeat(seat) ? true : seat.connected,
     occupied: seatOccupied(seat),
     difficulty: seat.difficulty,
-    isBot: isBotSeat(seat)
+    isBot: isBotSeat(seat),
+    ready: isBotSeat(seat) ? true : seat.ready
   };
 }
 
@@ -314,11 +341,14 @@ function buildSnapshot(room, viewerToken) {
       mySeatIndex: mySeatIndex >= 0 ? mySeatIndex : null,
       hostSeatIndex,
       isHost: mySeatIndex >= 0 && hostSeatIndex === mySeatIndex,
-      canStart: canStartRoom(room),
+      canStart: canStartReadyCountdown(room) || canSingleHumanAutostart(room),
       humanSeatCount: humanSeatCount(room),
-      readyHumanSeatCount: readyHumanSeatsCount(room),
       joinedHumanSeatCount: joinedHumanSeatsCount(room),
+      connectedHumanSeatCount: connectedHumanSeatsCount(room),
+      readyHumanSeatCount: readyHumanSeatsCount(room),
       botSeatCount: botSeatCount(room),
+      countdownEndsAt: room.countdownEndsAt,
+      countdownSecondsLeft: countdownSecondsLeft(room),
       seats: room.seats.map(sanitizeSeatForClient)
     },
     game: room.game
@@ -327,6 +357,25 @@ function buildSnapshot(room, viewerToken) {
           log: room.game.log.slice()
         }
       : null
+  };
+}
+
+function buildPublicRoomSnapshot(room) {
+  return {
+    code: room.code,
+    createdAt: room.createdAt,
+    started: Boolean(room.game),
+    paused: room.paused,
+    pauseReason: room.pauseReason,
+    humanSeatCount: humanSeatCount(room),
+    joinedHumanSeatCount: joinedHumanSeatsCount(room),
+    connectedHumanSeatCount: connectedHumanSeatsCount(room),
+    readyHumanSeatCount: readyHumanSeatsCount(room),
+    botSeatCount: botSeatCount(room),
+    countdownEndsAt: room.countdownEndsAt,
+    countdownSecondsLeft: countdownSecondsLeft(room),
+    canJoin: !room.game && findFirstOpenHumanSeat(room) >= 0,
+    seats: room.seats.map(sanitizeSeatForClient)
   };
 }
 
@@ -339,12 +388,15 @@ function buildAdminRoomSnapshot(room) {
     started: Boolean(room.game),
     paused: room.paused,
     pauseReason: room.pauseReason,
-    canStart: canStartRoom(room),
+    canStart: canStartReadyCountdown(room) || canSingleHumanAutostart(room),
     humanPlayers: humanSeatCount(room),
     joinedHumanPlayers: joinedHumanSeatsCount(room),
+    connectedHumanPlayers: connectedHumanSeatsCount(room),
     readyHumanPlayers: readyHumanSeatsCount(room),
     botPlayers: botSeatCount(room),
     botDifficulty: room.config.botDifficulty,
+    countdownEndsAt: room.countdownEndsAt,
+    countdownSecondsLeft: countdownSecondsLeft(room),
     hostName: hostSeatIndex === null ? null : room.seats[hostSeatIndex].name,
     currentTurnName: state ? state.players[state.currentPlayerIndex].name : null,
     phase: state ? state.phase : null,
@@ -361,6 +413,7 @@ function buildAdminRoomSnapshot(room) {
         name: seat.name,
         occupied: seatOccupied(seat),
         connected: isBotSeat(seat) ? true : seat.connected,
+        ready: isBotSeat(seat) ? true : seat.ready,
         difficulty: seat.difficulty,
         handCount: player ? player.hand.length : null,
         opened: player ? player.opened : false,
@@ -368,7 +421,7 @@ function buildAdminRoomSnapshot(room) {
         score: player ? player.score : 0
       };
     }),
-    logTail: room.game ? room.game.log.slice(-6) : []
+    logTail: room.game ? room.game.log.slice(-8) : []
   };
 }
 
@@ -379,6 +432,13 @@ function emitToRoom(room) {
   });
 }
 
+function broadcastPublicRooms() {
+  const payload = Array.from(rooms.values())
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+    .map(buildPublicRoomSnapshot);
+  io.emit("rooms:update", payload);
+}
+
 function clearBotTimer(room) {
   if (room.botTimer) {
     clearTimeout(room.botTimer);
@@ -386,7 +446,16 @@ function clearBotTimer(room) {
   }
 }
 
+function clearCountdown(room) {
+  if (room.countdownTimer) {
+    clearTimeout(room.countdownTimer);
+    room.countdownTimer = null;
+  }
+  room.countdownEndsAt = null;
+}
+
 function closeRoom(room, message) {
+  clearCountdown(room);
   clearBotTimer(room);
   room.seats.forEach((seat) => {
     if (isHumanSeat(seat) && seat.socketId) {
@@ -395,6 +464,13 @@ function closeRoom(room, message) {
     }
   });
   rooms.delete(room.code);
+  broadcastPublicRooms();
+}
+
+function closeRoomIfEmpty(room) {
+  if (!hasNoJoinedHumans(room)) return false;
+  closeRoom(room, `Room ${room.code} closed because all players left.`);
+  return true;
 }
 
 function roomNeedsBotWork(room) {
@@ -415,8 +491,7 @@ function scheduleBotWork(room, delayMs) {
 }
 
 function runBotWork(room) {
-  if (room.botBusy) return;
-  if (!roomNeedsBotWork(room)) return;
+  if (room.botBusy || !roomNeedsBotWork(room)) return;
   room.botBusy = true;
 
   try {
@@ -440,6 +515,7 @@ function runBotWork(room) {
     }
 
     emitToRoom(room);
+    broadcastPublicRooms();
   } finally {
     room.botBusy = false;
   }
@@ -455,10 +531,11 @@ function joinSocketToSeat(socket, room, seatIndex, token, name) {
   seat.name = normalizeName(name);
   seat.connected = true;
   seat.socketId = socket.id;
+  seat.ready = false;
   if (!room.hostToken) room.hostToken = token;
   socket.join(room.code);
   addSocketIndex(socket, room.code, seat.token);
-  room.paused = room.game ? readyHumanSeatsCount(room) !== humanSeatCount(room) : false;
+  room.paused = room.game ? connectedHumanSeatsCount(room) !== humanSeatCount(room) : false;
   room.pauseReason = room.paused ? "Waiting for every human player to reconnect." : "";
 }
 
@@ -472,6 +549,7 @@ function getRequiredDiscardMelds(game, playerIndex) {
 }
 
 function startGame(room) {
+  clearCountdown(room);
   clearBotTimer(room);
   room.game = new TongitsLogic.TongitsGame({
     seed: Date.now(),
@@ -479,7 +557,48 @@ function startGame(room) {
   });
   room.paused = false;
   room.pauseReason = "";
+  emitToRoom(room);
+  broadcastPublicRooms();
   scheduleBotWork(room, BOT_ACTION_DELAY_MS);
+}
+
+function startReadyCountdown(room) {
+  if (room.countdownTimer || room.game) return;
+  room.countdownEndsAt = Date.now() + READY_COUNTDOWN_MS;
+  room.countdownTimer = setTimeout(() => {
+    room.countdownTimer = null;
+    if (!rooms.has(room.code)) return;
+    if (canStartReadyCountdown(room)) {
+      startGame(room);
+      return;
+    }
+    clearCountdown(room);
+    emitToRoom(room);
+    broadcastPublicRooms();
+  }, READY_COUNTDOWN_MS);
+  emitToRoom(room);
+  broadcastPublicRooms();
+}
+
+function syncLobbyLifecycle(room) {
+  if (!rooms.has(room.code) || room.game) return;
+  if (closeRoomIfEmpty(room)) return;
+
+  if (canSingleHumanAutostart(room)) {
+    startGame(room);
+    return;
+  }
+
+  if (canStartReadyCountdown(room)) {
+    startReadyCountdown(room);
+  } else if (room.countdownEndsAt) {
+    clearCountdown(room);
+    emitToRoom(room);
+    broadcastPublicRooms();
+  } else {
+    emitToRoom(room);
+    broadcastPublicRooms();
+  }
 }
 
 function runAction(room, seatIndex, action) {
@@ -560,6 +679,7 @@ app.get("/api/admin/rooms", requireAdmin, (_req, res) => {
 app.post("/api/admin/rooms", requireAdmin, (req, res) => {
   const room = makeRoom(req.body || {});
   rooms.set(room.code, room);
+  broadcastPublicRooms();
   res.json({ ok: true, room: buildAdminRoomSnapshot(room) });
 });
 
@@ -572,6 +692,8 @@ app.delete("/api/admin/rooms/:code", requireAdmin, (req, res) => {
 });
 
 io.on("connection", (socket) => {
+  socket.emit("rooms:update", Array.from(rooms.values()).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).map(buildPublicRoomSnapshot));
+
   socket.on("lobby:create", (_payload, reply) => {
     return reply({ ok: false, error: "Rooms can be created only from the admin page." });
   });
@@ -588,7 +710,7 @@ io.on("connection", (socket) => {
     const existingSeatIndex = getSeatIndexByToken(room, token);
     if (existingSeatIndex >= 0) {
       joinSocketToSeat(socket, room, existingSeatIndex, token, payload.name);
-      emitToRoom(room);
+      syncLobbyLifecycle(room);
       return reply({ ok: true, roomCode });
     }
 
@@ -596,7 +718,7 @@ io.on("connection", (socket) => {
     if (seatIndex < 0) return reply({ ok: false, error: "No open human seats remain in that room." });
 
     joinSocketToSeat(socket, room, seatIndex, token, payload.name);
-    emitToRoom(room);
+    syncLobbyLifecycle(room);
     return reply({ ok: true, roomCode });
   });
 
@@ -605,29 +727,49 @@ io.on("connection", (socket) => {
     const token = String((payload && payload.token) || "").trim();
     const room = rooms.get(roomCode);
     if (!room || !token) return reply({ ok: false, error: "Unable to resume that room." });
-    if (!room.game && !room.seats.some((seat) => isHumanSeat(seat) && seat.token === token)) {
-      return reply({ ok: false, error: "Seat not found in that room." });
-    }
+
     const seatIndex = getSeatIndexByToken(room, token);
     if (seatIndex < 0) return reply({ ok: false, error: "Seat not found in that room." });
+
+    if (room.game) {
+      const seat = room.seats[seatIndex];
+      seat.connected = true;
+      seat.socketId = socket.id;
+      socket.join(room.code);
+      addSocketIndex(socket, room.code, seat.token);
+      room.paused = connectedHumanSeatsCount(room) !== humanSeatCount(room);
+      room.pauseReason = room.paused ? "Waiting for every human player to reconnect." : "";
+      emitToRoom(room);
+      broadcastPublicRooms();
+      scheduleBotWork(room, BOT_RESPONSE_DELAY_MS);
+      return reply({ ok: true, roomCode });
+    }
+
     joinSocketToSeat(socket, room, seatIndex, token, room.seats[seatIndex].name);
-    emitToRoom(room);
-    scheduleBotWork(room, BOT_RESPONSE_DELAY_MS);
+    syncLobbyLifecycle(room);
     return reply({ ok: true, roomCode });
   });
 
-  socket.on("lobby:start", (payload, reply) => {
+  socket.on("lobby:setReady", (payload, reply) => {
     const roomCode = normalizeRoomCode(payload && payload.roomCode);
     const token = String((payload && payload.token) || "").trim();
+    const ready = Boolean(payload && payload.ready);
     const room = rooms.get(roomCode);
     if (!room) return reply({ ok: false, error: "Room not found." });
-    if (token !== room.hostToken) return reply({ ok: false, error: "Only the host can start the match." });
     if (room.game) return reply({ ok: false, error: "The match has already started." });
-    if (!canStartRoom(room)) return reply({ ok: false, error: "All required human seats must be connected before start." });
 
-    startGame(room);
-    emitToRoom(room);
-    return reply({ ok: true });
+    const seatIndex = getSeatIndexByToken(room, token);
+    if (seatIndex < 0) return reply({ ok: false, error: "You are not seated in that room." });
+
+    const seat = room.seats[seatIndex];
+    if (!seat.connected) return reply({ ok: false, error: "Reconnect before readying up." });
+    seat.ready = ready;
+    syncLobbyLifecycle(room);
+    return reply({ ok: true, ready });
+  });
+
+  socket.on("lobby:start", (_payload, reply) => {
+    return reply({ ok: false, error: "Matches now start automatically once the room is ready." });
   });
 
   socket.on("room:nextRound", (payload, reply) => {
@@ -639,10 +781,12 @@ io.on("connection", (socket) => {
     if (!room.game.state.roundOver) return reply({ ok: false, error: "The current round is still in progress." });
 
     clearBotTimer(room);
+    clearCountdown(room);
     room.game.newRound();
-    room.paused = readyHumanSeatsCount(room) !== humanSeatCount(room);
+    room.paused = connectedHumanSeatsCount(room) !== humanSeatCount(room);
     room.pauseReason = room.paused ? "Waiting for every human player to reconnect." : "";
     emitToRoom(room);
+    broadcastPublicRooms();
     scheduleBotWork(room, BOT_ACTION_DELAY_MS);
     return reply({ ok: true });
   });
@@ -666,7 +810,7 @@ io.on("connection", (socket) => {
     ensureHost(room);
     removeSocketIndex(socket.id);
     socket.leave(room.code);
-    emitToRoom(room);
+    syncLobbyLifecycle(room);
     return reply({ ok: true });
   });
 
@@ -681,6 +825,7 @@ io.on("connection", (socket) => {
 
     const result = runAction(room, seatIndex, payload.action || {});
     emitToRoom(room);
+    broadcastPublicRooms();
     if (result.ok) scheduleBotWork(room, room.game && room.game.state.pendingDraw ? BOT_RESPONSE_DELAY_MS : BOT_ACTION_DELAY_MS);
     return reply(result);
   });
@@ -706,12 +851,13 @@ io.on("connection", (socket) => {
       room.pauseReason = `${seat.name} disconnected. Waiting for reconnection.`;
       clearBotTimer(room);
       emitToRoom(room);
+      broadcastPublicRooms();
       return;
     }
 
     clearHumanSeat(seat);
     ensureHost(room);
-    emitToRoom(room);
+    syncLobbyLifecycle(room);
   });
 });
 

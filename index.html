@@ -22,6 +22,7 @@
             <option value="dark">Dark</option>
           </select>
         </label>
+        <button id="music-toggle-btn" type="button">Music: On</button>
         <button id="leave-room-btn" type="button">Leave Room</button>
         <button id="rules-btn" type="button">Rules</button>
       </div>
@@ -134,7 +135,7 @@
   <div id="lobby-panel" class="overlay">
     <article class="modal lobby-modal">
       <h2 id="lobby-title">Multiplayer Lobby</h2>
-      <p id="lobby-copy">Enter your name and the room code provided by the admin, then join the table.</p>
+      <p id="lobby-copy">Choose an open room like an online game lobby, then ready up when you are seated.</p>
       <div class="lobby-form">
         <label>
           Name
@@ -153,6 +154,11 @@
         <button id="create-room-btn" type="button" hidden>Create Room</button>
         <button id="join-room-btn" type="button">Join Room</button>
       </div>
+      <div class="room-browser-head">
+        <strong>Game Rooms</strong>
+        <span id="room-directory-status">Waiting for the room list...</span>
+      </div>
+      <div id="room-directory" class="room-directory"></div>
       <div class="lobby-meta">
         <div class="lobby-chip">Room <strong id="lobby-room-code">-</strong></div>
         <div class="lobby-chip">Seat <strong id="lobby-seat-label">-</strong></div>
@@ -161,7 +167,7 @@
       <div id="lobby-seats" class="lobby-seats"></div>
       <div class="lobby-actions">
         <button id="copy-room-btn" type="button">Copy Room Code</button>
-        <button id="start-match-btn" type="button">Start Match</button>
+        <button id="start-match-btn" type="button">Ready Up</button>
       </div>
     </article>
   </div>
