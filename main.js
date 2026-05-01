@@ -4,6 +4,7 @@
   "use strict";
 
   const L = window.TongitsLogic;
+  const TABLE_MUSIC_URL = "assets/music/smooth-like-jazz-mixkit.mp3";
 
   const els = {};
   let socket = null;
@@ -25,8 +26,7 @@
       this.ctx = null;
       this.enabled = false;
       this.musicEnabled = localStorage.getItem("tongitsMusicEnabled") !== "off";
-      this.musicTimer = null;
-      this.musicCursor = 0;
+      this.music = null;
     }
 
     unlock() {
@@ -44,6 +44,16 @@
       this.musicEnabled = Boolean(enabled);
       localStorage.setItem("tongitsMusicEnabled", this.musicEnabled ? "on" : "off");
       this.updateMusicState();
+    }
+
+    ensureMusic() {
+      if (this.music) return this.music;
+      const music = new Audio(TABLE_MUSIC_URL);
+      music.preload = "auto";
+      music.loop = true;
+      music.volume = 0.18;
+      this.music = music;
+      return music;
     }
 
     tone(freq, duration, type, gainValue) {
@@ -78,73 +88,20 @@
     }
 
     updateMusicState() {
-      if (!this.ctx || !this.enabled) return;
-      if (!this.musicEnabled) {
-        if (this.musicTimer) clearInterval(this.musicTimer);
-        this.musicTimer = null;
+      const music = this.ensureMusic();
+      if (!music) return;
+
+      const shouldPlay = this.enabled && this.musicEnabled && !document.hidden;
+      if (!shouldPlay) {
+        if (!music.paused) music.pause();
         return;
       }
-      if (this.musicTimer) return;
-      this.musicCursor = this.ctx.currentTime + 0.08;
-      this.scheduleMusicBar();
-      this.musicTimer = window.setInterval(() => this.scheduleMusicBar(), 3800);
-    }
+      if (!music.paused) return;
 
-    scheduleMusicBar() {
-      if (!this.enabled || !this.ctx || !this.musicEnabled) return;
-      const start = Math.max(this.musicCursor, this.ctx.currentTime + 0.05);
-      const chords = [
-        [174.61, 220.0, 261.63],
-        [164.81, 207.65, 246.94],
-        [146.83, 196.0, 246.94],
-        [155.56, 196.0, 233.08]
-      ];
-
-      chords.forEach((chord, index) => {
-        const beatStart = start + index * 0.95;
-        chord.forEach((freq, noteIndex) => this.toneAt(freq, beatStart + noteIndex * 0.01, 0.72, "triangle", 0.012));
-        this.toneAt(chord[0] / 2, beatStart, 0.26, "sine", 0.024);
-        this.toneAt(chord[0] / 2, beatStart + 0.48, 0.22, "sine", 0.018);
-        this.noiseAt(beatStart + 0.22, 0.04, 0.006);
-        this.noiseAt(beatStart + 0.72, 0.04, 0.005);
-      });
-
-      this.musicCursor = start + 3.8;
-    }
-
-    toneAt(freq, startTime, duration, type, gainValue) {
-      if (!this.enabled || !this.ctx) return;
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      osc.type = type || "sine";
-      osc.frequency.value = freq;
-      gain.gain.setValueAtTime(Math.max(0.0001, gainValue || 0.01), startTime);
-      gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-      osc.start(startTime);
-      osc.stop(startTime + duration);
-    }
-
-    noiseAt(startTime, duration, gainValue) {
-      if (!this.enabled || !this.ctx) return;
-      const sampleRate = this.ctx.sampleRate;
-      const buffer = this.ctx.createBuffer(1, Math.max(1, Math.floor(sampleRate * duration)), sampleRate);
-      const data = buffer.getChannelData(0);
-      for (let i = 0; i < data.length; i += 1) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
-      const source = this.ctx.createBufferSource();
-      const filter = this.ctx.createBiquadFilter();
-      const gain = this.ctx.createGain();
-      filter.type = "highpass";
-      filter.frequency.value = 2600;
-      gain.gain.setValueAtTime(Math.max(0.0001, gainValue || 0.004), startTime);
-      gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
-      source.buffer = buffer;
-      source.connect(filter);
-      filter.connect(gain);
-      gain.connect(this.ctx.destination);
-      source.start(startTime);
-      source.stop(startTime + duration);
+      const playPromise = music.play();
+      if (playPromise && typeof playPromise.catch === "function") {
+        playPromise.catch(() => {});
+      }
     }
 
     play(type) {
@@ -1708,7 +1665,9 @@
   function init() {
     cacheEls();
     initFormDefaults();
+    audio.ensureMusic();
     bindStaticEvents();
+    document.addEventListener("visibilitychange", () => audio.updateMusicState());
     uiTicker = window.setInterval(tickUi, 500);
     connectToConfiguredServer();
     render(false);

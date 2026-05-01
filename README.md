@@ -242,7 +242,7 @@ The app compares the lowest possible deadwood after grouping hidden hand melds. 
 
 - Sound effects are generated with the browser Web Audio API.
 - Lobby and match sound cues include room join, ready, unready, countdown start, countdown ticks, match start, room closed, and the existing gameplay actions.
-- Background poker-style table music is generated in the browser and can be toggled with `Music: On/Off`.
+- Background table music now uses the bundled track `Smooth Like Jazz` by Ahjay Stelino from Mixkit and can be toggled with `Music: On/Off`.
 - Action-specific animations are triggered from game events in `main.js`.
 - The card graphics can be switched between `Classic` and `Dark`.
 
