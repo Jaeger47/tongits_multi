@@ -1,0 +1,81 @@
+<!doctype html>
+<!-- Author: Mark Daniel G. Dacer -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tongits Admin</title>
+  <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+  <div class="admin-shell">
+    <header class="admin-topbar">
+      <div>
+        <p class="eyebrow">Tongits Room Control</p>
+        <h1>Admin Panel</h1>
+      </div>
+      <div class="topbar-actions">
+        <button id="refresh-btn" type="button">Refresh</button>
+        <button id="logout-btn" type="button">Log Out</button>
+      </div>
+    </header>
+
+    <main class="admin-layout">
+      <section id="admin-login-view" class="panel login-panel">
+        <h2>Admin Login</h2>
+        <p>Sign in to create rooms, watch active tables, and remove rooms.</p>
+        <form id="admin-login-form" class="stack">
+          <label>
+            Password
+            <input id="admin-password-input" type="password" autocomplete="current-password" placeholder="Enter admin password">
+          </label>
+          <button id="admin-login-btn" type="submit">Enter Admin Panel</button>
+        </form>
+      </section>
+
+      <section id="admin-dashboard" class="dashboard" hidden>
+        <section class="panel create-panel">
+          <h2>Create Room</h2>
+          <p>Choose how many human players the room accepts. Any remaining seats become bots.</p>
+          <div class="create-grid">
+            <label>
+              Human Players
+              <select id="human-players-select">
+                <option value="1">1 human + 2 bots</option>
+                <option value="2">2 humans + 1 bot</option>
+                <option value="3" selected>3 humans</option>
+              </select>
+            </label>
+            <label>
+              Bot Difficulty
+              <select id="bot-difficulty-select">
+                <option value="easy">Easy</option>
+                <option value="medium" selected>Medium</option>
+                <option value="hard">Hard</option>
+              </select>
+            </label>
+            <button id="create-room-btn" type="button">Create Room</button>
+          </div>
+          <p class="hint">Players join from the main game page using the room code you create here.</p>
+        </section>
+
+        <section class="panel stats-panel">
+          <h2>Overview</h2>
+          <div id="admin-stats" class="stats-grid"></div>
+        </section>
+
+        <section class="panel rooms-panel">
+          <div class="panel-head">
+            <h2>Rooms</h2>
+            <p id="last-updated">Waiting for first refresh.</p>
+          </div>
+          <div id="admin-status" class="status-line"></div>
+          <div id="room-list" class="room-list"></div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <script src="admin.js"></script>
+</body>
+</html>

@@ -2,7 +2,7 @@
 
 Author: Mark Daniel G. Dacer
 
-Tongits Table is now a browser-based 3-player Tongits multiplayer app. The UI runs in the browser, while the match state is enforced by an authoritative Node.js + Socket.IO server.
+Tongits Table is now a browser-based 3-player Tongits multiplayer app with an admin-managed room system. The UI runs in the browser, while the match state is enforced by an authoritative Node.js + Socket.IO server.
 
 ## Quick Start
 
@@ -30,11 +30,36 @@ Tongits Table is now a browser-based 3-player Tongits multiplayer app. The UI ru
    http://localhost:3000
    ```
 
-5. In the app:
+5. Open the admin page:
+
+   ```text
+   http://localhost:3000/admin
+   ```
+
+6. Log in to the admin page.
+
+   Default password:
+
+   ```text
+   Dacer_2026!
+   ```
+
+7. Create a room with one of these setups:
+   - `1 human + 2 bots`
+   - `2 humans + 1 bot`
+   - `3 humans`
+
+8. Open the main game page:
+
+   ```text
+   http://localhost:3000
+   ```
+
+9. In the player app:
    - Enter a player name.
-   - The first player clicks `Create Room`.
-   - The other two players enter the room code and click `Join Room`.
-   - The host clicks `Start Match` once all 3 seats are filled.
+   - Enter the room code created by the admin.
+   - Click `Join Room`.
+   - The host clicks `Start Match` once all required human seats are connected.
 
 For local testing, you can open the app in three tabs or three browser windows. Each tab now keeps its own player seat token, so one browser can simulate all 3 players.
 
@@ -44,6 +69,8 @@ For local testing, you can open the app in three tabs or three browser windows. 
 - `Backend`: `server.js` on Node/Express
 - `Realtime sync`: Socket.IO
 - `Rules engine`: `game-logic.js`, shared by both client helpers and server authority
+- `Admin console`: `admin.html`, `admin.css`, `admin.js`
+- `Bot strategy`: `ai.js`, now used by the server for bot seats
 
 The server is authoritative. Clients send actions such as draw, discard, meld, sapaw, Draw, Fold, and Challenge. The server validates the move and broadcasts the updated room state.
 
@@ -88,6 +115,9 @@ D:\TONGITS
 |-- style.css
 |-- config.js
 |-- main.js
+|-- admin.html
+|-- admin.css
+|-- admin.js
 |-- game-logic.js
 |-- server.js
 |-- package.json
@@ -102,8 +132,9 @@ D:\TONGITS
 
 Notes:
 
-- `ai.js` remains in the repo from the earlier solo prototype, but the multiplayer runtime does not depend on it.
+- `ai.js` is used by the server whenever a room includes bot seats.
 - `game-logic.js` is written so it can be used in both the browser and Node.js.
+- The admin password defaults to `Dacer_2026!`, but you can override it with the `ADMIN_PASSWORD` environment variable.
 
 ## Controls
 
@@ -112,11 +143,19 @@ Notes:
 - `Player Name`: your display name in the room
 - `Server URL`: where the Socket.IO game server is running
 - `Room Code`: the 6-character room code
-- `Create Room`: create a new 3-player lobby and become host
 - `Join Room`: join an existing lobby
 - `Leave Room`: leave the current lobby or match
 - `Start Match`: host-only button to begin the round
 - `Next Round`: host-only button shown after round end
+
+### Admin Page
+
+- `Admin Login`: unlocks room creation and monitoring
+- `Human Players`: chooses whether the room is for 1, 2, or 3 human players
+- `Bot Difficulty`: sets the difficulty for any bot seats in that room
+- `Create Room`: creates a new room and room code
+- `Refresh`: reloads room monitoring data
+- `Remove Room`: force-closes a room for any connected players
 
 ### Match Actions
 
@@ -135,12 +174,13 @@ You can click cards to select them. You can also drag a selected card to the dis
 
 ## Match Flow
 
-1. Create or join a 3-player room.
+1. An admin creates a room.
 2. The host starts the match.
 3. The server deals 13 cards to the dealer and 12 to the other two players.
-4. Players take turns drawing, melding, sapaw, discarding, and calling endgame actions when legal.
-5. The server resolves Tongits, Draw, stock exhaustion, scoring, and burn/sunog.
-6. After the round summary, the host can start the next round.
+4. If the room uses bots, the remaining seats are filled by server-side bot players.
+5. Players take turns drawing, melding, sapaw, discarding, and calling endgame actions when legal.
+6. The server resolves bot turns, Tongits, Draw, stock exhaustion, scoring, and burn/sunog.
+7. After the round summary, the host can start the next round.
 
 If a player disconnects during an active match, the room pauses until that player reconnects. If a player disconnects in the lobby before the match starts, the seat is released so someone else can join.
 
@@ -199,9 +239,13 @@ The app compares the lowest possible deadwood after grouping hidden hand melds. 
 
 The multiplayer conversion was smoke-tested locally for:
 
-- room creation
+- admin login
+- admin room creation
 - room join
 - host start
+- bot-enabled room start with `1 human + 2 bots`
+- bot turn progression after a human action
+- mixed room readiness with `2 humans + 1 bot`
 - turn state broadcast after a legal action
 - disconnect pause during an active match
 - reconnect resume into the same seat

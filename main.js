@@ -97,10 +97,14 @@
       hostSeatIndex: null,
       isHost: false,
       canStart: false,
+      humanSeatCount: 3,
+      readyHumanSeatCount: 0,
+      joinedHumanSeatCount: 0,
+      botSeatCount: 0,
       seats: [
-        { index: 0, name: "Open seat 1", connected: false, occupied: false },
-        { index: 1, name: "Open seat 2", connected: false, occupied: false },
-        { index: 2, name: "Open seat 3", connected: false, occupied: false }
+        { index: 0, type: "human", difficulty: "human", name: "Open seat 1", connected: false, occupied: false, isBot: false },
+        { index: 1, type: "human", difficulty: "human", name: "Open seat 2", connected: false, occupied: false, isBot: false },
+        { index: 2, type: "human", difficulty: "human", name: "Open seat 3", connected: false, occupied: false, isBot: false }
       ]
     };
   }
@@ -242,6 +246,12 @@
       .replaceAll("<", "&lt;")
       .replaceAll(">", "&gt;")
       .replaceAll('"', "&quot;");
+  }
+
+  function titleCase(value) {
+    const text = String(value || "");
+    if (!text) return "";
+    return text.charAt(0).toUpperCase() + text.slice(1);
   }
 
   function renderCard(card, opts) {
@@ -498,8 +508,10 @@
     const seat = roomInfo.seats[seatIndex];
 
     if (!game) {
-      const seatTitle = seat && seat.occupied ? seat.name : `Open seat ${seatIndex + 1}`;
-      const seatMeta = seat && seat.occupied ? (seat.connected ? "Waiting in lobby" : "Disconnected") : "Available";
+      const seatTitle = seat ? seat.name : `Open seat ${seatIndex + 1}`;
+      let seatMeta = "Waiting for player";
+      if (seat && seat.isBot) seatMeta = `Bot - ${titleCase(seat.difficulty)}`;
+      else if (seat && seat.occupied) seatMeta = seat.connected ? "Waiting in lobby" : "Disconnected";
       panel.className = `player-panel ${slot === 0 ? "human-panel" : "opponent-panel"}`;
       panel.innerHTML = `
         <div class="player-head">
@@ -510,6 +522,7 @@
           <div class="badges">
             ${roomInfo.mySeatIndex === seatIndex ? '<span class="badge turn">You</span>' : ""}
             ${roomInfo.hostSeatIndex === seatIndex ? '<span class="badge">Host</span>' : ""}
+            ${seat && seat.isBot ? '<span class="badge">Bot</span>' : ""}
           </div>
         </div>
         <div class="opponent-hand"></div>
@@ -527,10 +540,11 @@
     if (roomInfo.hostSeatIndex === seatIndex) badges.push('<span class="badge">Host</span>');
     if (isSelf) badges.push('<span class="badge turn">You</span>');
     if (isTurn) badges.push('<span class="badge turn">Turn</span>');
+    if (player.isBot) badges.push(`<span class="badge">Bot ${escapeHtml(titleCase(player.difficulty))}</span>`);
     badges.push(`<span class="badge ${player.opened ? "" : "warn"}">${player.opened ? "Open" : "Unopened"}</span>`);
     if (player.drawBlocked) badges.push('<span class="badge warn">Draw blocked</span>');
     if (player.burned) badges.push('<span class="badge danger">Sunog</span>');
-    if (seat && !seat.connected) badges.push('<span class="badge danger">Offline</span>');
+    if (seat && !seat.connected && !player.isBot) badges.push('<span class="badge danger">Offline</span>');
 
     const deadwood = isSelf || game.state.roundOver ? L.bestDeadwood(player.hand.filter(Boolean)).points : null;
     const meta = isSelf
@@ -570,12 +584,11 @@
 
   function renderTurnBanner() {
     if (!roomInfo.code) {
-      els["turn-banner"].textContent = "Connect to your Render game server and create or join a room.";
+      els["turn-banner"].textContent = "Connect to your game server and join a room created by the admin.";
       return;
     }
     if (!game) {
-      const seated = roomInfo.seats.filter((seat) => seat.occupied).length;
-      els["turn-banner"].textContent = `Lobby ${roomInfo.code}: ${seated}/3 seats filled.`;
+      els["turn-banner"].textContent = `Lobby ${roomInfo.code}: ${roomInfo.readyHumanSeatCount}/${roomInfo.humanSeatCount} human seats ready.`;
       return;
     }
     if (roomInfo.paused) {
@@ -772,16 +785,16 @@
     els["player-name-input"].disabled = matchActive;
     els["server-url-input"].disabled = inLobbyRoom;
     els["room-code-input"].disabled = matchActive;
-    els["create-room-btn"].disabled = inLobbyRoom;
+    els["create-room-btn"].disabled = true;
     els["join-room-btn"].disabled = inLobbyRoom || matchActive;
 
     if (!roomInfo.code) {
       els["lobby-title"].textContent = "Multiplayer Lobby";
-      els["lobby-copy"].textContent = "Enter your name, confirm the server, then create or join a 3-player room.";
-      els["lobby-room-code"].textContent = "-";
+      els["lobby-copy"].textContent = "Enter your name, confirm the server, then join a room code created by the admin.";
+      els["lobby-room-code"].textContent = "Admin";
       els["lobby-seat-label"].textContent = "-";
       els["lobby-host-label"].textContent = "-";
-      els["lobby-seats"].innerHTML = [0, 1, 2].map((seatIndex) => `<div class="lobby-seat"><strong>Seat ${seatIndex + 1}</strong><span>Open</span></div>`).join("");
+      els["lobby-seats"].innerHTML = [0, 1, 2].map((seatIndex) => `<div class="lobby-seat"><strong>Seat ${seatIndex + 1}</strong><span>Waiting for room setup</span></div>`).join("");
       els["copy-room-btn"].disabled = true;
       els["start-match-btn"].disabled = true;
       els["start-match-btn"].textContent = "Start Match";
@@ -796,10 +809,10 @@
     if (!game) {
       els["lobby-title"].textContent = `Room ${roomInfo.code}`;
       els["lobby-copy"].textContent = roomInfo.canStart
-        ? "All 3 players are seated. Host can start the match now."
-        : "Waiting for all 3 seats to fill before the host can start.";
+        ? "All required human seats are ready. Host can start the match now."
+        : `Waiting for ${roomInfo.readyHumanSeatCount}/${roomInfo.humanSeatCount} human seats to be ready before the host can start.`;
       els["start-match-btn"].disabled = !(roomInfo.isHost && roomInfo.canStart);
-      els["start-match-btn"].textContent = roomInfo.isHost ? "Start Match" : "Host Starts Match";
+      els["start-match-btn"].textContent = roomInfo.isHost ? "Start Match" : (roomInfo.hostSeatIndex === null ? "Waiting For First Player" : "Host Starts Match");
     } else {
       els["lobby-title"].textContent = `Room ${roomInfo.code} Paused`;
       els["lobby-copy"].textContent = roomInfo.pauseReason || "Waiting for every player to reconnect.";
@@ -812,7 +825,7 @@
       .map((seat) => `<div class="lobby-seat ${seat.occupied ? "" : "open"} ${seat.index === roomInfo.mySeatIndex ? "mine" : ""}">
         <strong>Seat ${seat.index + 1}</strong>
         <span>${escapeHtml(seat.name)}</span>
-        <small>${seat.occupied ? (seat.connected ? "Connected" : "Disconnected") : "Open"}</small>
+        <small>${seat.isBot ? `Bot - ${escapeHtml(titleCase(seat.difficulty))}` : (seat.occupied ? (seat.connected ? "Connected" : "Disconnected") : "Waiting for player")}</small>
       </div>`)
       .join("");
   }
