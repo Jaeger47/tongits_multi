@@ -1,8 +1,8 @@
-# Tongits Table
+# Dacer's Tongits Table
 
 Author: Mark Daniel G. Dacer
 
-Tongits Table is now a browser-based 3-player Tongits multiplayer app with an admin-managed room system. The UI runs in the browser, while the match state is enforced by an authoritative Node.js + Socket.IO server.
+Dacer's Tongits Table is a browser-based 3-player Tongits multiplayer app with an admin-managed room system. The UI runs in the browser, while the match state is enforced by an authoritative Node.js + Socket.IO server.
 
 ## Quick Start
 

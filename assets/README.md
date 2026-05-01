@@ -1,5 +1,6 @@
 # Tongits Table Assets
 
+- `dacers-tongits-table-banner.png` is the welcome banner shown before the lobby opens.
 - `card-back.svg` is the shared card back used for AI hands and the stock pile.
 - `table-felt.svg` is the table texture used by the browser UI.
 - `music/smooth-like-jazz-mixkit.mp3` is the bundled table music track used by the app.

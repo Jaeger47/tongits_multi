@@ -20,6 +20,7 @@
   let resumeAttempted = false;
   let uiTicker = null;
   let lastLobbyCountdownSecond = null;
+  let welcomeDismissed = sessionStorage.getItem("tongitsWelcomeDismissed") === "1";
 
   class AudioEngine {
     constructor() {
@@ -199,6 +200,8 @@
       "summary-content",
       "next-round-btn",
       "lobby-panel",
+      "welcome-panel",
+      "welcome-enter-btn",
       "lobby-title",
       "lobby-copy",
       "lobby-room-code",
@@ -249,6 +252,14 @@
 
   function updateMusicButton() {
     els["music-toggle-btn"].textContent = `Music: ${audio.musicEnabled ? "On" : "Off"}`;
+  }
+
+  function dismissWelcome() {
+    welcomeDismissed = true;
+    sessionStorage.setItem("tongitsWelcomeDismissed", "1");
+    audio.unlock();
+    audio.play("click");
+    render(false);
   }
 
   function playerToken() {
@@ -1021,9 +1032,14 @@
       .join("");
   }
 
+  function renderWelcomeOverlay() {
+    els["welcome-panel"].hidden = welcomeDismissed;
+  }
+
   function renderConnectionState() {
     renderMultiplayerStatus();
     renderLobbyOverlay();
+    renderWelcomeOverlay();
   }
 
   function render(scheduleAnimations) {
@@ -1551,6 +1567,7 @@
     els["create-room-btn"].addEventListener("click", createRoom);
     els["join-room-btn"].addEventListener("click", joinRoom);
     els["leave-room-btn"].addEventListener("click", leaveRoom);
+    els["welcome-enter-btn"].addEventListener("click", dismissWelcome);
     els["start-match-btn"].addEventListener("click", toggleReady);
     els["copy-room-btn"].addEventListener("click", copyRoomCode);
     els["next-round-btn"].addEventListener("click", nextRound);

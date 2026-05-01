@@ -710,6 +710,40 @@ body[data-card-theme="dark"] .stock-pile {
   padding: 22px;
 }
 
+.welcome-overlay {
+  z-index: 24;
+  background: rgba(6, 16, 14, .84);
+}
+
+.welcome-modal {
+  width: min(1040px, 100%);
+  padding: 14px;
+  background: #0d1715;
+}
+
+.welcome-banner {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid #2b463f;
+  border-radius: 8px;
+  box-shadow: 0 20px 42px rgba(0, 0, 0, .34);
+}
+
+.welcome-actions {
+  display: flex;
+  justify-content: center;
+  padding-top: 14px;
+}
+
+.welcome-actions button {
+  min-width: 170px;
+  background: var(--yellow);
+  border-color: #d7aa18;
+  color: #211a04;
+  font-weight: 900;
+}
+
 .lobby-modal {
   width: min(760px, 100%);
 }
